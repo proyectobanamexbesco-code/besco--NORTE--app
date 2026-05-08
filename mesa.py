@@ -14,7 +14,7 @@ from pypdf import PdfWriter
 LOGO_PATH = "logo besco 2026.jpeg"
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="BESCO | Reportes Técnicos", layout="wide")
+st.set_page_config(page_title="BESCO NORTE | Reportes Técnicos", layout="wide")
 
 st.markdown("""
     <style>
@@ -36,7 +36,7 @@ class BESCO_PDF(FPDF):
         self.set_font('Arial', 'B', 12)
         self.set_text_color(30, 58, 95)
         self.set_xy(100, 15)
-        self.cell(0, 10, 'REPORTE DE SERVICIO TÉCNICO', 0, 1, 'R')
+        self.cell(0, 10, 'REPORTE DE SERVICIO TÉCNICO - NORTE', 0, 1, 'R')
         self.set_font('Arial', '', 9)
         self.set_x(100)
         self.cell(0, 5, f"Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R')
@@ -88,21 +88,37 @@ class BESCO_PDF(FPDF):
         
         self.ln(5)
 
-# --- FUNCIÓN DE CORREO AUTOMÁTICO (MODIFICADA PARA EL ASUNTO) ---
+# --- FUNCIÓN DE CORREO AUTOMÁTICO (CON LÓGICA DE OFICINAS NORTE) ---
 def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, correos_extra):
     try:
         remitente = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
-        destinatarios = ["gerardo.mendez@besco.mx"]
         
+        # 1. Mapeo exacto de los correos por oficina
+        mapeo_correos = {
+            "Torreon": "alberto.ruiz@besco.mx",
+            "Monterrey": "caleb.cardona@besco.mx",
+            "Ciudad Juarez": "caleb.cardona@besco.mx",
+            "Reynosa": "caleb.cardona@besco.mx",
+            "Chihuahua": "caleb.cardona@besco.mx",
+            "Saltillo": "caleb.cardona@besco.mx",
+            "Tampico": "gerardo.mendez@besco.mx"
+        }
+        
+        # 2. Obtenemos el correo obligatorio según la selección
+        correo_obligatorio = mapeo_correos.get(oficina, "gerardo.mendez@besco.mx")
+        
+        # 3. Lo agregamos como destinatario principal
+        destinatarios = [correo_obligatorio]
+        
+        # 4. Si el técnico escribió correos adicionales, los sumamos
         if correos_extra:
             extras = [correo.strip() for correo in correos_extra.split(",") if correo.strip()]
             destinatarios.extend(extras)
 
         msg = EmailMessage()
         
-        # --- NUEVO ASUNTO DEL CORREO ---
-        asunto = f"Reporte Fotográfico BESCO: {cliente}"
+        asunto = f"Reporte Fotográfico BESCO NORTE: {cliente}"
         if folio: asunto += f" | TK: {folio}"
         if sucursal: asunto += f" | Suc: {sucursal}"
         if oficina: asunto += f" | Of: {oficina}"
@@ -110,7 +126,7 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
         msg['Subject'] = asunto
         msg['From'] = remitente
         msg['To'] = ", ".join(destinatarios) 
-        msg.set_content(f"Se ha generado un nuevo reporte múltiple desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\nSucursal: {sucursal}\nOficina: {oficina}\n\nSe adjunta el documento PDF con la evidencia.")
+        msg.set_content(f"Se ha generado un nuevo reporte múltiple desde la aplicación BESCO NORTE.\n\nOficina: {oficina}\nCliente: {cliente}\nFolio/TK: {folio}\nSucursal: {sucursal}\n\nSe adjunta el documento PDF con la evidencia.")
         
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
 
@@ -123,7 +139,7 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
         return False
 
 # --- INTERFAZ ---
-st.title("📑 Sistema de Evidencia Técnica BESCO")
+st.title("📑 Sistema de Evidencia - BESCO NORTE")
 
 st.subheader("1. Identificación General del Servicio")
 col_cl1, col_cl2, col_cl3 = st.columns([2, 1, 1])
@@ -133,7 +149,17 @@ estado_op = col_cl3.selectbox("Estado Global de Operación", [1, 2, 3, 4, 5, 6, 
 
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
-oficina = col_loc2.text_input("Oficina / Área específica")
+
+# --- LISTA DESPLEGABLE DE OFICINAS NORTE ---
+oficina = col_loc2.selectbox("Oficina Responsable", [
+    "Torreon", 
+    "Monterrey", 
+    "Ciudad Juarez", 
+    "Reynosa", 
+    "Chihuahua", 
+    "Saltillo", 
+    "Tampico"
+])
 
 c1, c2, c3, c4 = st.columns(4)
 tecnico = c1.text_input("Técnico Asignado")
@@ -198,12 +224,14 @@ st.subheader("3. Materiales Utilizados (Global)")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
 
 st.subheader("4. Evidencia Documental (Reporte Físico)")
-st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente que ampara esta visita.")
+st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente.")
 f_folio = st.file_uploader("FOLIO BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=False)
 
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
-st.info("💡 Tu reporte siempre se enviará a gerardo.mendez@besco.mx por seguridad.")
+
+# Mensaje dinámico para que el técnico sepa a quién le va a llegar
+st.info(f"💡 El reporte será enviado automáticamente al responsable de {oficina}.")
 correos_adicionales = st.text_input("Agregar destinatarios extra (separe los correos con una coma)", placeholder="ejemplo@cliente.com")
 
 if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
@@ -291,25 +319,18 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
         merger.write(salida_pdf)
         pdf_bytes = salida_pdf.getvalue()
 
-    # --- NUEVO NOMBRE DE ARCHIVO PDF ---
-    # Limpiamos los espacios en blanco adicionales para que el nombre del archivo se vea prolijo
     nom_cliente = cliente.strip() if cliente else "SinCliente"
     nom_folio = folio.strip() if folio else "SinFolio"
     nom_sucursal = f"_{sucursal.strip()}" if sucursal else ""
     nom_oficina = f"_{oficina.strip()}" if oficina else ""
     
-    # El archivo se llamará: Reporte_BESCO_Cliente_Folio_Sucursal_Oficina.pdf
-    # Ejemplo: Reporte_BESCO_Banamex_TK-9999_Centro_Piso2.pdf
-    nombre_pdf = f"Reporte_BESCO_{nom_cliente}_{nom_folio}{nom_sucursal}{nom_oficina}.pdf"
-    
-    # Quitamos caracteres que podrían dar error en el nombre del archivo de Windows
+    nombre_pdf = f"Reporte_BESCO_NORTE_{nom_cliente}_{nom_folio}{nom_sucursal}{nom_oficina}.pdf"
     nombre_pdf = nombre_pdf.replace(" ", "_").replace("/", "-").replace("\\", "-")
     
     if "EMAIL_SENDER" in st.secrets:
-        # Pasamos el nombre del archivo a la función de correo
         exito = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_pdf, correos_adicionales)
         if exito:
-            st.success(f"✅ ¡Reporte Listo y enviado a los destinatarios!")
+            st.success(f"✅ ¡Reporte Listo y enviado!")
         else:
             st.warning("El reporte se generó pero hubo un error al enviar el correo.")
     else:
